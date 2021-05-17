@@ -11,8 +11,17 @@ library(tidyverse)
 library(corrgram)
 library(AST)
 library(STAT)
+library('ggplot2')
+library('forecast')
+library('tseries')
+library("data.table")
 
 #DATI
+
+#####Dati annuali.
+#####Dati mensili.
+
+#####Dati trimestrali.
 
 ####Daset utilizzato
 
@@ -26,8 +35,9 @@ library(STAT)
 (campione_Y <- read.csv("C:/Users/39338/Desktop/Universita' Secondo Anno/Statistica/Applicativo R/Progetto Ricerca/Tesina/UFFICIALE/Consumo-main/gdp_ita.csv")[18:56])
 (campione_T <- read.csv("C:/Users/39338/Desktop/Universita' Secondo Anno/Statistica/Applicativo R/Progetto Ricerca/Tesina/UFFICIALE/Consumo-main/gettito2.csv")[2:40])
 (campione_DP <- read.csv("C:/Users/39338/Desktop/Universita' Secondo Anno/Statistica/Applicativo R/Progetto Ricerca/Tesina/UFFICIALE/Consumo-main/inflazione.csv")[14:130])
-#AGG: Wealth..
-#AGG: Real interest rate..
+(campione_i <- read_csv("C:/Users/39338/Desktop/Universita' Secondo Anno/Statistica/Applicativo R/Progetto Ricerca/Tesina/UFFICIALE/Consumo-main/estat_irt_st_a_filtered.csv")[4,])
+#AGG: Wealth
+#AGG: (...)
 
 ####Le variabili di interesse.
 
@@ -38,14 +48,24 @@ library(STAT)
 #Reddito
 
 (Y = as.numeric(campione_Y))
-#Unica variabile, reddito disponibile?
-#(...)
 
-#Pressione fiscale
-#completare la tassazione.
+#Tasse e pressione fiscale
 
-(Tax = as.numeric(campione_T))
-t_perc <- Tax/Y
+(Tax = as.numeric(campione_T)*2)
+(t_perc <- Tax/Y)
+
+#Reddito disponibile
+
+(YD = Y-(Tax))
+
+#Tassi d'interesse
+
+ii=as.numeric(campione_i)[15:24]
+i2 = c()
+for(k in ii){
+  i2 <- c(i2, rep(k, 4))
+}
+(ii <- i2[1:39])
 
 #Prezzi
 
@@ -63,12 +83,12 @@ for(i in 1:length(campione_DP)){
     a <- c(a,campione_DP[i])
   }
 }
-infl <- infl+1
+(DP <- infl)
+(infl <- infl+1)
 
 #Tempo
 
 Time <- 1:length(Y)
-Dtime = 1:length(DC)
 
 ####La gestione delle variabili d'interesse.
 
@@ -77,19 +97,29 @@ Dtime = 1:length(DC)
 (C = C/infl)
 (Y = Y/infl)
 (Tax = Tax/infl)
+(r = ii-DP)
 
 ##La trasformazione in variabili logaritmiche.
 
 logC = log(C)
 logY = log(Y)
-logT = log(Tax)
+logYD = log(Y)
+#logT = log(Tax)
+#logt_perc = log(t_perc)
+logt_perc2 <- log(t_perc+.14) 
+#logY = logY+log(1-t_perc)
+#(logr=log(r))
 
 ##Il calcolo delle differenze prime di ciascuna variabile.
 
+#(Dr=diff(logr)[1:38])
+Dr=diff(r)
 DC = c()
 DY = c()
+DYD = c()
 DT = c()
-
+Dt_perc = c()
+Dt_perc2 = c()
 n = length(logY)
 
 for(i in 1:n-1){
@@ -99,18 +129,33 @@ for(i in 1:n-1){
   DY <- c(DY, c(logY[i+1]-logY[i]))
 }
 for(i in 1:n-1){
+  DYD <- c(DYD, c(logYD[i+1]-logYD[i]))
+}
+for(i in 1:n-1){
   DT <- c(DT, c(logT[i+1]-logT[i]))
 }
-
-#diff.ts() ..verificare 
+for(i in 1:n-1){
+  Dt_perc <- c(Dt_perc, c(logt_perc[i+1]-logt_perc[i]))
+}
+for(i in 1:n-1){
+  Dt_perc2 <- c(Dt_perc2, c(logt_perc2[i+1]-logt_perc2[i]))
+}
 
 Dtime = 1:length(DC)
 
-##Il calcolo delle medie mobili di ciascuna variabile.
+# Shift differenze prime per l'autoregressione.
 
-DCM = c(rollmean(DC, 4),rollmean(DC, 4)[32:34] )
-DTM = c(rollmean(DT, 4),rollmean(DT, 4)[32:34] )
-DYM = c(rollmean(DY, 4),rollmean(DY, 4)[32:34] )
+(lagDC <- shift(DC))
+(lagDY <- shift(DY))
+(lagDYD = shift(DYD))
+(lagDT <- shift(DT))
+(lagDr <- shift(Dr))
+
+##Il calcolo delle medie mobili di ciascuna variabile.
+#DCM = c(rollmean(DC, 4),rollmean(DC, 4)[32:34] )
+#DTM = c(rollmean(DT, 4),rollmean(DT, 4)[32:34] )
+#DYM = c(rollmean(DY, 4),rollmean(DY, 4)[32:34] )
+
 
 ####Rappresentazione delle variabili di interesse.
 
@@ -118,29 +163,79 @@ DYM = c(rollmean(DY, 4),rollmean(DY, 4)[32:34] )
 
 #Adattare dataframe come modellato dal documento..
 
-(provaC<- ts(campione_C, start = 1999, frequency=4))
+#Dati trimestrali
+(provaC<- ts(C, start = 1999, frequency=4))
 (provaY<- ts(Y, start = 1999, frequency=4))
 (provaT<- ts(Tax, start = 1999, frequency=4))
+(provat_perc<- ts(t_perc, start = 1999, frequency=4))
+(prova_i<-ts(i, start=1999, end=2008, frequency = 4))
 
-(dati <- data.frame(consumo=c(C), reddito=c(Y), tasse=c(Tax)))
-(dati7 <- data.frame(consumo=c(C), reddito=c(Y), tasse=c(t_perc)))
-(dati1=data.frame(VariazioniC=DC, VariazioniY=DY, VariazioniT=DT))
+#Dati annuali
 
+#Cy=c()
+#counter <- 0
+#for(i in 1:length(C)){
+#counter <- counter+1
+#if(counter%%4==0){
+#counter <- 0
+#Cy <- c(C[i]+C[i+1]+C[i+2]+C[i+3])
+#}
+#}
+
+#(prova1C<- ts(C, start = 1999, end=2008, frequency=1))
+#(prova1Y<- ts(Y, start = 1999, end=2008,frequency=1))
+#(prova1T<- ts(Tax, start = 1999,  end=2008, frequency=1))
+#(prova1t_perc<- ts(t_perc, start = 1999, end=2008, frequency=1))
+#(prova1_i<-ts(i, start=1999, end=2008, frequency =1))
+
+#as.ts ; is.ts
+
+#???????
+#(dati <- data.frame(consumo=c(C), reddito=c(Y), tasse=c(Tax)))
 #matrici
-(datimat <- as.matrix(dati))
+#(datimat <- as.matrix(dati))
 
 #liste
 
 ##Metodi di decomposizione delle serie storiche
 
-#metodo 0
+##metodo 0
 
+#observed, trend, seasonal, random
 (provadecC=decompose(provaC, type = "additive"))
 plot(provadecC)
 (provadecY=decompose(provaY, type = "additive"))
 plot(provadecY)
 (provadecT=decompose(provaT, type = "additive"))
 plot(provadecT)
+#(provadect_perc=decompose(provat_perc, type = "additive"))
+#plot(provadect_perc)
+
+#observed
+#trend
+#seasonal
+plot(provadecC$seasonal)
+par(new=T)
+plot(provadecY$seasonal, col="red")
+par(new=T)
+plot(provadecT$seasonal, col="green")
+#random
+
+###????
+ts.plot(provaC, col=4)
+abline(v=1999:2009, lty=2, lwd=0.3)
+ts.plot(provadecC$x,provadecC$trend,provadecC$seasonal,provadecC$random, main="Confronto")
+ts.plot(provadecY$x,provadecY$trend,provadecY$seasonal,provadecY$random, main="Confronto")
+
+plot.new()
+plot(provadecC$x)
+lines(provadecC$trend, col=3)
+lines(provadecC$seasonal, col=4)
+abline(v=c(1999:2001,2009:2011), lwd=0.3,lty=4)
+
+plot(provadecC$random)
+
+#random=differenze prime?
 
 #metodo 1 "loess"
 
@@ -150,8 +245,10 @@ plot(prova1decC, main = "Decomposizione C con la funzione stl")
 plot(prova1decY, main = "Decomposizione Y con la funzione stl")
 (prova1decT=stl(provaT, s.window = "periodic"))
 plot(prova1decT, main = "Decomposizione T con la funzione stl")
+(prova1dect_perc=stl(provat_perc, s.window = "periodic"))
+plot(prova1dect_perc, main = "Decomposizione T con la funzione stl")
 
-# metodo 2 tramite funzione tsr()
+# metodo 2 tramite funzione tsr()...
 
 #(prova2decC=tsr(provaC~poly(1)+c))
 #plot(prova2decC)
@@ -168,6 +265,8 @@ trend.stl=prova1decC$time.series[,2]
 
 plot(provadecC$trend,main="Comparazione del trend stimato")
 lines(trend.stl, col="blue")
+
+#USARE GGPLOT2
 
 ##Lisciamento delle serie storiche..(pg.20)
 
@@ -299,6 +398,24 @@ play3d(spin3d(axis = c(0, 0, 1), rpm = 3), duration = 100000)
 
 ###Regressione in variazioni
 
+#Modello AR
+
+plot(DYD, DC)
+par(new=T)
+plot(DYD, lagDC, col="red")
+
+
+Aregr <- lm(DC~lagDC + shift(lagDC))
+summary(Aregr)
+
+##lag ottimale
+lm(DC~lagDC)
+lag(lagDC)
+BIC(lm(DC~lagDC))
+BIC(lm(DC~lag(lagDC)))
+BIC(lm(DC~lag(lag(lagDC))))
+BIC(lm(DC~lag(lag(lag(lagDC)))))
+
 #Consumo-Reddito
 
 VregrCR <- lm(DC~ DY)
@@ -325,12 +442,67 @@ abline(c(VCTMb00,VCTMb11))
 #abline(c(a=0, b=0))
 #abline(c(a=0, b=mean(Y)))
 
-#Consumo-Reddito-TasseM
+#SCELTA DEL MODELLO.
 
-VregrMCRTM <- lm(DC~ DY + DTM)
-summary(VregrMCRTM)
+#Backward
+#llagDC=lag(lagDC)
+#lagDC=lagDC[3:38]
+#llagDC=llagDC[3:38]
+#DC=DC[3:38]
+#DYD=DYD[3:38]
+#Dr=Dr[3:38]
+#completo=lm(DC~lagDC+llagDC+DYD+Dr)
+#step(completo, direction = "backward")
 
-#(..i plot cambiano poco..)
+#oppure, guardando al p-value..
+
+VregrMCRt_perc1<-update(VregrMCRt_perc, . ~ .-Dr) 
+summary(VregrMCRt_perc1)
+
+VregrMCRt_perc2<-update(VregrMCRt_perc1, . ~ .-lag(lagDC)) 
+(summary(VregrMCRt_perc2))
+
+#Forward
+#base=lm(DC~DYD)
+#step(base, scope = formula(completo), direction = "forward")
+
+#Stepwise
+
+step(completo, direction = "both")
+
+#MODELLO SCELTO: Consumo-Reddito-pressione fiscale
+#domanda..non si dovrebbero considerare anche gli effetti combinati causati dalla variazione di due o piu' variabili contemporaneamente?
+
+#Descrizione modello
+VregrMCRt_perc <- lm(DC~lagDC + lag(lagDC)+ DYD + Dr)
+#-valori osservati
+#b1 = cov(DY, DC)/var(DY)
+#b1
+#DC
+#-valori stimati
+#VregrMCRt_perc$fitted.values
+#-residui
+#VregrMCRt_perc$residuals
+
+#I risultati del modello
+
+(DEF=summary(VregrMCRt_perc))
+(coeff=summary(VregrMCRt_perc)$coefficients)
+
+#domanda: intercetta=trend indipendente dalle variabili esplicative??
+
+plot(VregrMCRt_perc)
+scatterplotMatrix(~DC+DY+lagDC+lag(lagDC), col="black", pch=20, regLine = list(method=lm, lty=1, lwd=2, col="chartreuse3"), smooth=FALSE, diagonal=list(method ="histogram", breaks="FD"), main="Matrice di dispersione con rette di regressione", data=ais) 
+
+
+plot(DY,DC,pch=1, cex=1)
+abline(c(coeff[1],coeff[4]))
+abline(h=0,v=0)
+
+#...
+plot(Dr,DC,pch=1, cex=1)
+abline(c(coeff[1],coeff[5]))
+abline(h=0,v=0)
 
 #Consumo-Consumo(t-1)-Reddito-TasseM
 #(DCC <- c(DC[[1]], DC[1:37]))
@@ -353,6 +525,10 @@ summary(VregrMCRTM)
 #(...)
 
 #commento dell'output:
+#intervalli di confidenza per ciascun parametro.
+
+confint(VregrMCRt_perc)
+confint(VregrMCRt_perc, level=0.99)
 
 #- analizzare la variabilita' degli stimatori b00 e b11 misurata dallo St.Error;
 #- notiamo che, nel caso di b00, non rifiutiamo l'ipotesi che questa assuma il valore stimato;
@@ -362,12 +538,42 @@ summary(VregrMCRTM)
 
 #Test ANOVA su ciascuna variabile indipendente
 
-#- testata la normalita', calcolarsi e riportare gli intervalli di confidenza di b00, b11 e Y;
+anova(VregrMCRt_perc)
+
+#Test ANOVA per confrontare i diversi modelli ottenuti
+
+anova(VregrMCRt_perc,VregrMCRt_perc1) 
+anova(VregrMCRt_perc1,VregrMCRt_perc2) 
+
+#- testata la normalita', calcolarsi e riportare gli intervalli di confidenza dei bk e Y;
 #- plottare le rispettive distribuzioni normali
 #- calcolare l'intervallo predittivo di Yn+1 e analizzarlo.
 
+####L'introduzione di variabili qualitative.
+
+#Idee:
+#I. riduzione delle asimmetria informativa;
+#II. riduzione delle incompletezze di mercato;
+#III. (...)
+
+#L'intervallo di confidenza di DC
+
+(conf<-predict(VregrMCRt_perc, level=0.99, interval="confidence"))
+
+#L'intervallo di previsione di DC
+#(newdata=data.frame(DC=c(0.44))
+#(prev<-predict(VregrMCRt_perc, newdata = newdata, level=0.99, interval="prediction"))
 
 #III FASE: la validazione del modello.
+
+###Analisi di stazionarieta'
+
+adf.test(DC)
+plot.ts(DC, col="red")
+adf.test(DY)
+par(new=TRUE)
+plot.ts(DY, col="green")
+abline(c(a=0,b=0))
 
 ###Test Anova sui parametri della regressione
 
@@ -377,14 +583,11 @@ anova(VregrMCRTM)
 
 ###L'analisi dei residui
 
-residui=summary(Vregr)$residuals
+residui=summary(VregrMCRt_perc)$residuals
 
 #errori a media nulla
 
 t.test(residui)
-
-plot(VregrMCRTM$fitted.values,VregrMCRTM$residuals)
-abline(c(a=0,b=0))
 
 #errori omoschedastici
 
@@ -405,33 +608,42 @@ jarque.bera.test(residui)
 hist(residui, prob=T, main="Distribuzione dei residui", xlab="Residui")
 plot(density(residui,kernel="gaussian"),main="Distribuzione dei residui:
 lisciamento")
+#sovrapporre
 
 #errori non autocorrelati
 
-dwtest(Vregr)
+dwtest(VregrMCRt_perc)
 
-durbinWatsonTest(Vregr)
+durbinWatsonTest(VregrMCRt_perc)
 
 #..correlogramma
 
+acf(residui, lag.max = 39, main="Correlogramma dei residui")
 acf(residui, main="Correlogramma dei residui")
+Pacf(residui, main="Correlogramma dei residui")
 
 
 ###Analisi del valore informativo di ciascuna variabile
 
 #VIF
-#come si interpreta?
 
-vif(Vregr)
+vif(VregrMCRt_perc)
+
+#commento VIF:
+#Il vif misura la collinearita' tra le varibili indipendenti,
+#in particolare, al cresce della collinearita' cresce il vif e,
+#per valori superiori a 15, solitamente, conviene riconsiderare
+#le variabili esplicative utilizzate.
 
 ###Gestione degli outliers
 #Come si interpreta?
 
-outlierTest(Vregr)
+outlierTest(VregrMCRTM)
 
 #ANALISI DEI RISULTATI DEL MODELLO.
 
 ###analisi su caratteristiche e relazione tra C e Y
+###Studiare bene la correlazione parziale e integrarla
 
 #Y prociclica
 (r = cor(DC,DY))
@@ -439,6 +651,13 @@ outlierTest(Vregr)
 
 #bozza: Y leading o logging?
 #ciclo for
+
+#..grangertest(DC~DY, order=2)
+
+#Traslazione della serie di k (valori positivi (verde) anticipano; valori negativi (rosso) posticipano)
+#ts.xy_a12 <-lag(ts.xy, k = 12); ts.xy_r12 <-lag(ts.xy, k = -12)
+#plot.ts(ts.xy, lwd=1.5, xlim = c(1999,2012))
+#lines(ts.xy_a12, col=3); lines(ts.xy_r12, col=2); abline(v=c(1999:2001,2009:2011), lwd=0.3,lty=4)
 
 #bozza: persistenza di C e Y attraverso l'autocorrelazione
 plot(c(1:length(C)), C)
@@ -458,3 +677,31 @@ corrplot(cor(dati1), method = "pie")
 #dataframe riassuntivo
 
 (dati2=data.frame(VariazioniC=DC, VariazioniY=DY, Variazioni_stimateC=Vregr$fitted.values, Residui=residui))
+
+plot(Y,C, col='red')
+par(new=T)
+plot(arima.sim(model=list(order(1,1,4)), n=39))
+
+####PREVISIONI?????!
+
+#Descrizione modello
+VregrMCRt_perc <- lm(shift(DC)~ shift(DY) + shift(Dr) + shift(lagDC))
+#I risultati del modello
+
+(DEF=summary(VregrMCRt_perc))
+coeff=summary(VregrMCRt_perc)$coefficients
+DC[[38]]
+predict(VregrMCRt_perc, c(shift(DY)[[37]],shift(Dr)[[37]],shift(lagDC)[[37]]))
+(Y = -0.0001977+0.5664152*shift(DY)[[37]]+0.021624*shift(Dr)[[37]]-0.0452063*shift(lagDC)[[37]])
+
+####PREVISIONI?????!
+
+#Descrizione modello
+VregrMCRt_perc <- lm(shift(DC)~ shift(DY) + shift(Dr))
+#I risultati del modello
+
+(DEF=summary(VregrMCRt_perc))
+coeff=summary(VregrMCRt_perc)$coefficients
+DC[[38]]
+predict(VregrMCRt_perc, c(shift(DY)[[37]],shift(Dr)[[37]],shift(lagDC)[[37]]))
+(Y = 0.001551+0.580182*shift(DY)[[37]]+0.016298*shift(Dr)[[37]])
